@@ -1,30 +1,36 @@
 import React, { useEffect, useState } from 'react'
-import { View, Text, FlatList, TouchableOpacity } from 'react-native'
-import { db } from '../lib/firebase'
-import { collection, getDocs } from 'firebase/firestore'
+import { View, Text, FlatList, TouchableOpacity, RefreshControl } from 'react-native'
 import { useRouter } from 'expo-router'
+import { auth, listFriendIds, getUsersByIds } from '../lib/firebase'
+import type { UserProfile } from '../types'
 
-type Friend = {
-    id: string
-    name?: string
-    hobbies?: string[]
-}
+type FriendRow = { id: string } & UserProfile
 
 export default function Friends() {
     const router = useRouter()
-    const [friends, setFriends] = useState<Friend[]>([])
+    const [friends, setFriends] = useState<FriendRow[]>([])
+    const [refreshing, setRefreshing] = useState(false)
+
+    async function load() {
+        const me = auth.currentUser
+        if (!me) return
+        const ids = await listFriendIds(me.uid)
+        const users = await getUsersByIds(ids)
+        setFriends(users)
+    }
 
     useEffect(() => {
-        async function load() {
-            const snap = await getDocs(collection(db, 'users'))
-            const users: Friend[] = snap.docs.map(d => ({
-                id: d.id,
-                ...(d.data() as Omit<Friend, 'id'>),
-            }))
-            setFriends(users)
-        }
         load()
     }, [])
+
+    async function onRefresh() {
+        setRefreshing(true)
+        try {
+            await load()
+        } finally {
+            setRefreshing(false)
+        }
+    }
 
     return (
         <View style={{ flex: 1, padding: 12 }}>
@@ -32,19 +38,21 @@ export default function Friends() {
             <FlatList
                 data={friends}
                 keyExtractor={i => i.id}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                 renderItem={({ item }) => (
                     <TouchableOpacity
                         style={{ padding: 12, borderBottomWidth: 1 }}
                         onPress={() => router.push(`/chat/${item.id}`)}
                     >
-                        <Text style={{ fontWeight: '600' }}>
-                            {item.name ?? 'Unnamed'}
-                        </Text>
-                        <Text>
-                            {item.hobbies?.join(', ') ?? ''}
-                        </Text>
+                        <Text style={{ fontWeight: '600' }}>{item.name ?? 'Unnamed'}</Text>
+                        <Text>{item.hobbies?.join(', ') ?? ''}</Text>
                     </TouchableOpacity>
                 )}
+                ListEmptyComponent={
+                    <Text style={{ padding: 12, opacity: 0.7 }}>
+                        No friends yet. Go to Matches and “Like/Add Friend”.
+                    </Text>
+                }
             />
         </View>
     )
