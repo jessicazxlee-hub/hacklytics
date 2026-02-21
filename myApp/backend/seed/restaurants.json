@@ -1,0 +1,16 @@
+[
+  {
+    "name": "Example Taco Station",
+    "cuisine": "Mexican",
+    "address": "123 Main St",
+    "latitude": 30.2672,
+    "longitude": -97.7431
+  },
+  {
+    "name": "Example Noodle House",
+    "cuisine": "Asian",
+    "address": "456 Market Ave",
+    "latitude": 30.2711,
+    "longitude": -97.7437
+  }
+]
