@@ -2,7 +2,8 @@ def test_register_and_login(client):
     register_payload = {
         "email": "user@example.com",
         "password": "password123",
-        "full_name": "Test User",
+        "firebase_uid": "firebase-user-123",
+        "neighborhood": "South Congress",
     }
     register_response = client.post("/api/v1/auth/register", json=register_payload)
     assert register_response.status_code == 201

@@ -24,5 +24,6 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> Token:
     user = crud_user.authenticate_user(db, payload.email, payload.password)
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password")
-    token = create_access_token(subject=user.email)
+    token_subject = user.firebase_uid or user.email
+    token = create_access_token(subject=token_subject)
     return Token(access_token=token)
