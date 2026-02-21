@@ -1,0 +1,9 @@
+[
+  {"code": "coffee", "label": "Coffee", "is_active": true},
+  {"code": "hiking", "label": "Hiking", "is_active": true},
+  {"code": "live_music", "label": "Live Music", "is_active": true},
+  {"code": "movies", "label": "Movies", "is_active": true},
+  {"code": "museums", "label": "Museums", "is_active": true},
+  {"code": "running", "label": "Running", "is_active": true},
+  {"code": "yoga", "label": "Yoga", "is_active": true}
+]

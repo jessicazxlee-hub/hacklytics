@@ -1,6 +1,6 @@
 from collections.abc import Generator
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Header, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
@@ -35,3 +35,11 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
         )
 
     return {"sub": subject}
+
+
+def require_admin_key(x_admin_key: str | None = Header(default=None, alias="X-Admin-Key")) -> None:
+    if x_admin_key != settings.admin_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid admin key",
+        )

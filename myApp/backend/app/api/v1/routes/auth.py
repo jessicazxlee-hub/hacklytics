@@ -2,9 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
-from app.core.security import create_access_token
 from app.crud import user as crud_user
-from app.schemas.auth import LoginRequest, Token
+from app.schemas.auth import LoginRequest
 from app.schemas.user import UserCreate, UserRead
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -19,11 +18,9 @@ def register(payload: UserCreate, db: Session = Depends(get_db)) -> UserRead:
     return user
 
 
-@router.post("/login", response_model=Token)
-def login(payload: LoginRequest, db: Session = Depends(get_db)) -> Token:
-    user = crud_user.authenticate_user(db, payload.email, payload.password)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password")
-    token_subject = user.firebase_uid or user.email
-    token = create_access_token(subject=token_subject)
-    return Token(access_token=token)
+@router.post("/login", status_code=status.HTTP_410_GONE)
+def login(payload: LoginRequest) -> None:  # noqa: ARG001
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail="Local login is disabled. Use Firebase authentication and send Firebase ID tokens to backend endpoints.",
+    )

@@ -15,6 +15,13 @@ def get_user_by_firebase_uid(db: Session, firebase_uid: str) -> User | None:
     return db.scalar(stmt)
 
 
+def get_user_by_subject(db: Session, subject: str) -> User | None:
+    user = get_user_by_firebase_uid(db, subject)
+    if user is not None:
+        return user
+    return get_user_by_email(db, subject)
+
+
 def create_user_profile(db: Session, profile_in: UserProfileCreate) -> User:
     user = User(**profile_in.model_dump())
     db.add(user)

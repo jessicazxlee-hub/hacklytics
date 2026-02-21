@@ -18,6 +18,7 @@ class User(Base):
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     firebase_uid: Mapped[str | None] = mapped_column(String(128), unique=True, index=True, nullable=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
+    display_name: Mapped[str | None] = mapped_column(String(32), nullable=True)
     auth_provider: Mapped[str] = mapped_column(
         String(32),
         nullable=False,

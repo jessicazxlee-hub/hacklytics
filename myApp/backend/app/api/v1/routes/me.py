@@ -1,15 +1,56 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_db
+from app.crud import hobby as crud_hobby
+from app.crud import user as crud_user
+from app.schemas.user import MeProfileUpdate, UserProfileUpdate, UserRead
 
 router = APIRouter(prefix="/me", tags=["me"])
 
 
 @router.get("")
 def read_me(current_user: dict = Depends(get_current_user)) -> dict:
-    return {"user": current_user}
+    return {"sub": current_user["sub"]}
 
 
-@router.get("/profile")
-def read_profile(current_user: dict = Depends(get_current_user)) -> dict:
-    return {"profile": current_user}
+@router.get("/profile", response_model=UserRead)
+def read_profile(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> UserRead:
+    user = crud_user.get_user_by_subject(db, current_user["sub"])
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    hobby_codes = crud_hobby.get_user_hobby_codes(db, user.id)
+    profile = UserRead.model_validate(user).model_copy(update={"hobbies": hobby_codes})
+    return profile
+
+
+@router.patch("/profile", response_model=UserRead)
+def update_profile(
+    payload: MeProfileUpdate,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> UserRead:
+    user = crud_user.get_user_by_subject(db, current_user["sub"])
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    update_values = payload.model_dump(exclude_unset=True, exclude={"hobbies"})
+    if update_values:
+        base_update = UserProfileUpdate(**update_values)
+        updated_user = crud_user.update_user_profile(db, user, base_update)
+    else:
+        updated_user = user
+
+    if payload.hobbies is not None:
+        try:
+            crud_hobby.set_user_hobbies_by_codes(db, updated_user.id, payload.hobbies)
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    hobby_codes = crud_hobby.get_user_hobby_codes(db, updated_user.id)
+    profile = UserRead.model_validate(updated_user).model_copy(update={"hobbies": hobby_codes})
+    return profile

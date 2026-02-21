@@ -7,7 +7,7 @@ import {
     ScrollView,
 } from 'react-native'
 import { Picker } from '@react-native-picker/picker'
-import { signupWithEmail, createProfile } from './lib/firebase'
+import { signupWithEmail } from './lib/firebase'
 import { useRouter } from 'expo-router'
 
 export default function CreateAccount() {
@@ -21,19 +21,29 @@ export default function CreateAccount() {
     const [hobbies, setHobbies] = useState('')
 
     async function handleSignup() {
-        const user = await signupWithEmail(email, password)
+        const normalizedEmail = email.trim().toLowerCase()
+        const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+        if (!emailPattern.test(normalizedEmail)) {
+            alert(`Invalid email: "${normalizedEmail}"`)
+            return
+        }
 
-        await createProfile(user.uid, {
-            name,
-            age: Number(age),
-            gender,
-            hobbies: hobbies
-                .split(',')
-                .map(s => s.trim())
-                .filter(Boolean),
-        })
+        try {
+            await signupWithEmail(normalizedEmail, password)
 
-        router.replace('/(tabs)')
+            alert('Signup succeeded')
+            router.replace('/(tabs)')
+        } catch (err: unknown) {
+            if (typeof err === 'object' && err !== null && 'code' in err) {
+                alert(String((err as { code: unknown }).code))
+                return
+            }
+            if (typeof err === 'object' && err !== null && 'message' in err) {
+                alert(String((err as { message: unknown }).message))
+                return
+            }
+            alert('Signup failed')
+        }
     }
 
     return (

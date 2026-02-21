@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     secret_key: str = "change-me"
     access_token_expire_minutes: int = 60
     algorithm: str = "HS256"
+    admin_api_key: str = "change-me-admin-key"
 
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/proximity"
 
