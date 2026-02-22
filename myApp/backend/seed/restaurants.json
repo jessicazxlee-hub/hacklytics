@@ -12,5 +12,82 @@
     "address": "456 Market Ave",
     "latitude": 30.2711,
     "longitude": -97.7437
+  },
+  {
+    "name": "Peachtree Coffee Club",
+    "cuisine": "Cafe",
+    "address": "855 Peachtree St NE, Atlanta, GA",
+    "latitude": 33.7797,
+    "longitude": -84.3886
+  },
+  {
+    "name": "Midtown Pasta Kitchen",
+    "cuisine": "Italian",
+    "address": "931 Monroe Dr NE, Atlanta, GA",
+    "latitude": 33.7818,
+    "longitude": -84.3674
+  },
+  {
+    "name": "Piedmont Ramen Lab",
+    "cuisine": "Japanese",
+    "address": "510 10th St NW, Atlanta, GA",
+    "latitude": 33.7812,
+    "longitude": -84.3909
+  },
+  {
+    "name": "BeltLine Taco Works",
+    "cuisine": "Mexican",
+    "address": "670 DeKalb Ave NE, Atlanta, GA",
+    "latitude": 33.7617,
+    "longitude": -84.3665
+  },
+  {
+    "name": "Tech Square Dumpling House",
+    "cuisine": "Chinese",
+    "address": "75 5th St NW, Atlanta, GA",
+    "latitude": 33.7759,
+    "longitude": -84.3963
+  },
+  {
+    "name": "Juniper Sushi Spot",
+    "cuisine": "Japanese",
+    "address": "950 W Peachtree St NW, Atlanta, GA",
+    "latitude": 33.7814,
+    "longitude": -84.3882
+  },
+  {
+    "name": "Ponce Vegan Kitchen",
+    "cuisine": "Vegan",
+    "address": "676 North Highland Ave NE, Atlanta, GA",
+    "latitude": 33.7721,
+    "longitude": -84.3521
+  },
+  {
+    "name": "Krog Street Burger Co",
+    "cuisine": "American",
+    "address": "99 Krog St NE, Atlanta, GA",
+    "latitude": 33.7532,
+    "longitude": -84.3659
+  },
+  {
+    "name": "Inman Park Brunch Table",
+    "cuisine": "Brunch",
+    "address": "299 N Highland Ave NE, Atlanta, GA",
+    "latitude": 33.7619,
+    "longitude": -84.3527
+  },
+  {
+    "name": "Grant Park Pizza Oven",
+    "cuisine": "Pizza",
+    "address": "519 Memorial Dr SE, Atlanta, GA",
+    "latitude": 33.7466,
+    "longitude": -84.3699
+  },
+  {
+    "name": "Buckhead Mediterranean Grill",
+    "cuisine": "Mediterranean",
+    "address": "3100 Roswell Rd NW, Atlanta, GA",
+    "latitude": 33.8401,
+    "longitude": -84.3794
   }
 ]
