@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { View, Text, TextInput, Button } from 'react-native'
-import { auth, signOutUser } from '../lib/firebase'
-import { getMeProfile, patchMeProfile } from '../lib/backend'
+import { auth, signOutUser } from '../../lib/firebase'
+import { getMeProfile, patchMeProfile } from '../../lib/backend'
 import { onAuthStateChanged } from 'firebase/auth'
 import { useRouter } from 'expo-router'
 

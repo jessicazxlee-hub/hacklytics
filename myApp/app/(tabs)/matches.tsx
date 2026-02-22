@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { View, Text, FlatList, TouchableOpacity } from 'react-native'
-import { db } from '../lib/firebase'
+import { db } from '../../lib/firebase'
 import { collection, getDocs } from 'firebase/firestore'
 import { useRouter } from 'expo-router'
 
@@ -14,25 +14,6 @@ type MatchUser = {
         latitude?: number
         longitude?: number
     }
-}
-
-type LatLng = {
-    lat: number
-    lng: number
-}
-
-function distanceKm(a: LatLng, b: LatLng): number {
-    const R = 6371
-    const toRad = (v: number) => (v * Math.PI) / 180
-    const dLat = toRad(b.lat - a.lat)
-    const dLon = toRad(b.lng - a.lng)
-    const lat1 = toRad(a.lat)
-    const lat2 = toRad(b.lat)
-    const aa =
-        Math.sin(dLat / 2) ** 2 +
-        Math.sin(dLon / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2)
-    const c = 2 * Math.atan2(Math.sqrt(aa), Math.sqrt(1 - aa))
-    return R * c
 }
 
 export default function Matches() {

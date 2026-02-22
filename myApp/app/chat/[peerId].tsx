@@ -9,7 +9,7 @@ import {
     Platform,
 } from 'react-native'
 import { useLocalSearchParams } from 'expo-router'
-import { auth, db } from '../lib/firebase'
+import { auth, db } from '../../lib/firebase'
 import {
     collection,
     addDoc,
@@ -18,7 +18,7 @@ import {
     onSnapshot,
     serverTimestamp,
 } from 'firebase/firestore'
-import io from 'socket.io-client'
+import { io } from 'socket.io-client'
 
 type ChatMessage = {
     id?: string

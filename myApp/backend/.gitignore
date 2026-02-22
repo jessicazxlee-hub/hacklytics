@@ -8,3 +8,4 @@ __pycache__/
 hacklytics-b03dc-firebase-adminsdk-fbsvc-a8f3f21ab7.json
 *:Zone.Identifier
 firebase-service-account.json
+app/firebaseConfig.ts

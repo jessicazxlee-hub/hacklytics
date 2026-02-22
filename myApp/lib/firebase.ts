@@ -18,13 +18,13 @@ import type { UserProfile } from '../types'
 let firebaseConfig: FirebaseOptions | null = null
 
 try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const cfg = require('../firebaseConfig')
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const cfg = require('../app/firebaseConfig')
     firebaseConfig = cfg?.default ?? cfg
 } catch {
     try {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const cfg2 = require('../firebaseConfig.example')
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const cfg2 = require('../app/firebaseConfig.example')
         firebaseConfig = cfg2?.default ?? cfg2
     } catch {
         firebaseConfig = null

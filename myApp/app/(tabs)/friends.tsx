@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { View, Text, FlatList, TouchableOpacity } from 'react-native'
-import { db } from '../lib/firebase'
+import { db } from '../../lib/firebase'
 import { collection, getDocs } from 'firebase/firestore'
 import { useRouter } from 'expo-router'
 

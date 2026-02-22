@@ -5,7 +5,7 @@ import {
     Button,
     ScrollView,
 } from 'react-native'
-import { loginWithEmail } from './lib/firebase'
+import { loginWithEmail } from '../lib/firebase'
 import { Link, useRouter } from 'expo-router'
 
 export default function SignIn() {

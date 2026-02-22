@@ -1,8 +1,7 @@
 import React, { useEffect } from 'react'
-import { Stack } from 'expo-router'
-import { auth } from './lib/firebase'
-import { onAuthStateChanged } from 'firebase/auth'
 import { useRouter } from 'expo-router'
+import { auth } from '../lib/firebase'
+import { onAuthStateChanged } from 'firebase/auth'
 import { View, ActivityIndicator } from 'react-native'
 
 export default function Index() {
@@ -14,7 +13,7 @@ export default function Index() {
             else router.replace('/sign-in')
         })
         return unsub
-    }, [])
+    }, [router])
 
     return (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>

@@ -1,13 +1,12 @@
 import React, { useState } from 'react'
 import {
-    View,
     Text,
     TextInput,
     Button,
     ScrollView,
 } from 'react-native'
 import { Picker } from '@react-native-picker/picker'
-import { signupWithEmail } from './lib/firebase'
+import { signupWithEmail } from '../lib/firebase'
 import { useRouter } from 'expo-router'
 
 export default function CreateAccount() {
