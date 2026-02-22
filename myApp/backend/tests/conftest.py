@@ -23,6 +23,9 @@ def test_engine():
 
 @pytest.fixture
 def client(test_engine):
+    Base.metadata.drop_all(bind=test_engine)
+    Base.metadata.create_all(bind=test_engine)
+
     testing_session_local = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
     def override_get_db():

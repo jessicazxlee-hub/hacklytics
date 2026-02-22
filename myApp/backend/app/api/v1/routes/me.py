@@ -3,9 +3,12 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_db_user, get_current_user, get_db
 from app.crud import hobby as crud_hobby
+from app.crud import restaurant_rating as crud_restaurant_rating
 from app.crud import user as crud_user
 from app.models.user import User
 from app.schemas.user import MeProfileUpdate, UserProfileUpdate, UserRead
+from app.schemas.restaurant import RestaurantRead
+from app.schemas.restaurant_rating import RestaurantRatingRead, RestaurantRatingWithRestaurantRead
 
 router = APIRouter(prefix="/me", tags=["me"])
 
@@ -47,3 +50,18 @@ def update_profile(
     hobby_codes = crud_hobby.get_user_hobby_codes(db, updated_user.id)
     profile = UserRead.model_validate(updated_user).model_copy(update={"hobbies": hobby_codes})
     return profile
+
+
+@router.get("/restaurant-ratings", response_model=list[RestaurantRatingWithRestaurantRead])
+def list_my_restaurant_ratings(
+    current_user: User = Depends(get_current_db_user),
+    db: Session = Depends(get_db),
+) -> list[RestaurantRatingWithRestaurantRead]:
+    rows = crud_restaurant_rating.list_user_restaurant_ratings(db, user_id=current_user.id)
+    return [
+        RestaurantRatingWithRestaurantRead(
+            **RestaurantRatingRead.model_validate(rating).model_dump(),
+            restaurant=RestaurantRead.model_validate(restaurant),
+        )
+        for rating, restaurant in rows
+    ]
