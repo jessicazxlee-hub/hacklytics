@@ -7,8 +7,8 @@ import {
     ScrollView,
 } from 'react-native'
 import { Picker } from '@react-native-picker/picker'
-import { signupWithEmail, createProfile } from './lib/firebase'
-import { useRouter } from 'expo-router'
+import { signupWithEmail } from './lib/firebase'
+import { Link, useRouter } from 'expo-router'
 
 export default function CreateAccount() {
     const router = useRouter()
@@ -22,16 +22,6 @@ export default function CreateAccount() {
 
     async function handleSignup() {
         const user = await signupWithEmail(email, password)
-
-        await createProfile(user.uid, {
-            name,
-            age: Number(age),
-            gender,
-            hobbies: hobbies
-                .split(',')
-                .map(s => s.trim())
-                .filter(Boolean),
-        })
 
         router.replace('/(tabs)')
     }
@@ -91,6 +81,7 @@ export default function CreateAccount() {
             />
 
             <Button title="Create Account" onPress={handleSignup} />
+            <Link href="/sign-in" style={{ width: '100%', textAlign: 'center', margin: 10, padding: 10, color: 'white', backgroundColor: 'green' }}>Sign in</Link>
         </ScrollView>
     )
 }

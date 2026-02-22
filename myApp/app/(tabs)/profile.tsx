@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { View, Text, TextInput, Button } from 'react-native'
 import { auth } from '../lib/firebase'
-import { getProfile, createProfile } from '../lib/firebase'
+import { getProfile, createProfile, signOutUser } from '../lib/firebase'
 import { onAuthStateChanged } from 'firebase/auth'
 import { useRouter } from 'expo-router'
 
@@ -16,6 +16,11 @@ export default function Profile() {
         name: '',
         hobbies: '',
     })
+
+    async function handleLogout() {
+        await signOutUser()
+        router.replace('/create-account')
+    }
 
     useEffect(() => {
         const unsub = onAuthStateChanged(auth, async (u) => {
@@ -74,6 +79,9 @@ export default function Profile() {
             />
 
             <Button title="Save" onPress={save} />
+
+            <Button title="Log out" onPress={handleLogout} color="#c00" />
+            
         </View>
     )
 }
