@@ -11,12 +11,20 @@ export default function TabLayout() {
 
   return (
     <Tabs
+      initialRouteName="matches"
       screenOptions={{
         tabBarActiveTintColor: Colors[colorScheme ?? "light"].tint,
         headerShown: false,
         tabBarButton: HapticTab,
       }}
     >
+      <Tabs.Screen
+        name="index"
+        options={{
+          href: null, // 👈 hides it from tab bar
+        }}
+      />
+
       <Tabs.Screen
         name="matches"
         options={{
@@ -33,6 +41,15 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="map.fill" color={color} />,
         }}
       /> */}
+      <Tabs.Screen
+        name="discover"
+        options={{
+          title: "Discover",
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={28} name="person.fill" color={color} />
+          ),
+        }}
+      />
       <Tabs.Screen
         name="chat"
         options={{
