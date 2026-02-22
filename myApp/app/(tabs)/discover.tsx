@@ -1,14 +1,23 @@
+import {
+  APIProvider,
+  Map,
+  type MapCameraChangedEvent,
+  Marker,
+} from "@vis.gl/react-google-maps";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useFocusEffect } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Image,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
 } from "react-native";
-import { useFocusEffect } from "expo-router";
 
 import {
   getMyRestaurantRatings,
@@ -18,12 +27,26 @@ import {
   type RestaurantRatingWithRestaurant,
 } from "../../lib/backend";
 
+const API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+
 type RatingsByRestaurantId = Record<number, RestaurantRatingWithRestaurant>;
+
+function restaurantDescription(restaurant: Restaurant): string {
+  const parts = [
+    restaurant.cuisine ? `${restaurant.cuisine} cuisine` : null,
+    restaurant.address ? `Located at ${restaurant.address}` : null,
+  ].filter(Boolean);
+  if (parts.length === 0) {
+    return "Rate places you enjoy so Proximity can build better group matches and venue suggestions.";
+  }
+  return `${parts.join(". ")}.`;
+}
 
 export default function Discover() {
   const [query, setQuery] = useState("");
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [ratingsByRestaurantId, setRatingsByRestaurantId] = useState<RatingsByRestaurantId>({});
+  const [selectedRestaurantId, setSelectedRestaurantId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [ratingRestaurantId, setRatingRestaurantId] = useState<number | null>(null);
@@ -48,6 +71,14 @@ export default function Discover() {
 
       setRestaurants(restaurantsData);
       setRatingsByRestaurantId(ratingMap);
+
+      if (restaurantsData.length > 0) {
+        setSelectedRestaurantId((prev) =>
+          prev && restaurantsData.some((r) => r.id === prev) ? prev : restaurantsData[0].id,
+        );
+      } else {
+        setSelectedRestaurantId(null);
+      }
     } catch (err: unknown) {
       if (typeof err === "object" && err !== null && "message" in err) {
         alert(String((err as { message: unknown }).message));
@@ -71,20 +102,30 @@ export default function Discover() {
 
   const filteredRestaurants = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    if (!normalized) {
-      return restaurants;
-    }
+    if (!normalized) return restaurants;
     return restaurants.filter((restaurant) => {
-      const haystack = [
-        restaurant.name,
-        restaurant.cuisine ?? "",
-        restaurant.address ?? "",
-      ]
+      const haystack = [restaurant.name, restaurant.cuisine ?? "", restaurant.address ?? ""]
         .join(" ")
         .toLowerCase();
       return haystack.includes(normalized);
     });
   }, [restaurants, query]);
+
+  const markerRestaurants = useMemo(
+    () =>
+      filteredRestaurants.filter(
+        (restaurant) =>
+          typeof restaurant.latitude === "number" && typeof restaurant.longitude === "number",
+      ),
+    [filteredRestaurants],
+  );
+
+  const selectedRestaurant =
+    filteredRestaurants.find((restaurant) => restaurant.id === selectedRestaurantId) ??
+    restaurants.find((restaurant) => restaurant.id === selectedRestaurantId) ??
+    filteredRestaurants[0] ??
+    restaurants[0] ??
+    null;
 
   async function handleRate(restaurant: Restaurant, rating: number) {
     if (ratingRestaurantId !== null) return;
@@ -114,88 +155,142 @@ export default function Discover() {
     }
   }
 
+  const selectedRating = selectedRestaurant ? ratingsByRestaurantId[selectedRestaurant.id]?.rating ?? 0 : 0;
+
   return (
-    <View style={styles.container}>
-      <View style={styles.headerSection}>
-        <Text style={styles.title}>Discover</Text>
-        <Text style={styles.subtitle}>
-          Search places and rate what you&apos;ve visited.
-        </Text>
-        <TextInput
-          placeholder="Search locations..."
-          value={query}
-          onChangeText={setQuery}
-          style={styles.search}
+    <APIProvider apiKey={API_KEY ?? ""}>
+      <View style={styles.container}>
+        <View style={styles.headerSection}>
+          <Text style={styles.title}>Discover</Text>
+          <Text style={styles.subtitle}>
+            Search venues and rate what you&apos;ve tried to improve group matching.
+          </Text>
+          <TextInput
+            placeholder="Search locations..."
+            value={query}
+            onChangeText={setQuery}
+            style={styles.search}
+          />
+        </View>
+
+        {loading ? <ActivityIndicator style={{ marginTop: 8 }} /> : null}
+
+        <View style={styles.mapWrap}>
+          <Map
+            defaultZoom={13}
+            defaultCenter={{ lat: 33.77702970249832, lng: -84.39570715625945 }}
+            style={{ width: "100%", height: "100%" }}
+            onCameraChanged={(ev: MapCameraChangedEvent) =>
+              console.log("camera changed:", ev.detail.center, "zoom:", ev.detail.zoom)
+            }
+          >
+            {markerRestaurants.map((restaurant) => (
+              <Marker
+                key={restaurant.id}
+                position={{
+                  lat: restaurant.latitude as number,
+                  lng: restaurant.longitude as number,
+                }}
+                title={restaurant.name}
+                onClick={() => setSelectedRestaurantId(restaurant.id)}
+              />
+            ))}
+          </Map>
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.imagePlaceholder}>
+            <Image
+              source={{
+                uri: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400&q=80&auto=format&fit=crop",
+              }}
+              style={styles.image}
+            />
+          </View>
+
+          <View style={{ flex: 1 }}>
+            <Text style={styles.cardTitle}>
+              {selectedRestaurant?.name ?? "Select a place"}
+            </Text>
+            <Text style={styles.metaText}>
+              {selectedRestaurant
+                ? `${selectedRestaurant.cuisine ?? "Unknown cuisine"}${selectedRestaurant.address ? ` • ${selectedRestaurant.address}` : ""}`
+                : "Search or tap a marker to choose a venue"}
+            </Text>
+
+            <View style={{ flexDirection: "row", marginVertical: 8 }}>
+              {[...Array(5)].map((_, i) => {
+                const heartNumber = i + 1;
+                const isFilled = heartNumber <= selectedRating;
+                const disabled = !selectedRestaurant || ratingRestaurantId === selectedRestaurant.id;
+
+                return (
+                  <TouchableOpacity
+                    key={heartNumber}
+                    style={{ marginRight: 6 }}
+                    onPress={() => selectedRestaurant && void handleRate(selectedRestaurant, heartNumber)}
+                    disabled={disabled}
+                  >
+                    <MaterialCommunityIcons
+                      name={isFilled ? "heart" : "heart-outline"}
+                      size={24}
+                      color="#FF5A5F"
+                    />
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <Text style={styles.ratingLabel}>
+              {selectedRestaurant
+                ? `Your rating: ${selectedRating ? `${selectedRating}/5` : "Not rated yet"}`
+                : "Choose a venue to rate"}
+            </Text>
+            <Text style={styles.description}>
+              {selectedRestaurant
+                ? restaurantDescription(selectedRestaurant)
+                : "Ratings from Discover feed your preference signals for better group formation."}
+            </Text>
+            {selectedRestaurant && ratingRestaurantId === selectedRestaurant.id ? (
+              <Text style={styles.savingText}>Saving...</Text>
+            ) : null}
+          </View>
+        </View>
+
+        <FlatList
+          data={filteredRestaurants}
+          horizontal
+          refreshing={refreshing}
+          onRefresh={() => void load("refresh")}
+          keyExtractor={(item) => String(item.id)}
+          contentContainerStyle={{ gap: 8, paddingBottom: 8 }}
+          renderItem={({ item }) => {
+            const selected = item.id === selectedRestaurant?.id;
+            const myRating = ratingsByRestaurantId[item.id]?.rating ?? null;
+            return (
+              <Pressable
+                onPress={() => setSelectedRestaurantId(item.id)}
+                style={[styles.venueChip, selected ? styles.venueChipSelected : null]}
+              >
+                <Text style={[styles.venueChipText, selected ? styles.venueChipTextSelected : null]}>
+                  {item.name}
+                </Text>
+                <Text style={[styles.venueChipMeta, selected ? styles.venueChipMetaSelected : null]}>
+                  {myRating ? `${myRating}/5` : "Rate"}
+                </Text>
+              </Pressable>
+            );
+          }}
+          ListEmptyComponent={
+            !loading ? (
+              <Text style={styles.emptyText}>
+                {query.trim() ? "No restaurants match your search yet." : "No restaurants available yet. Seed restaurants first."}
+              </Text>
+            ) : null
+          }
         />
       </View>
-
-      {loading ? <ActivityIndicator style={{ marginTop: 8 }} /> : null}
-
-      <FlatList
-        data={filteredRestaurants}
-        refreshing={refreshing}
-        onRefresh={() => void load("refresh")}
-        keyExtractor={(item) => String(item.id)}
-        contentContainerStyle={{ gap: 12, paddingBottom: 20 }}
-        renderItem={({ item }) => {
-          const myRating = ratingsByRestaurantId[item.id];
-          const isSaving = ratingRestaurantId === item.id;
-
-          return (
-            <View style={styles.card}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>{item.name}</Text>
-                <Text style={styles.metaText}>
-                  {item.cuisine ?? "Unknown cuisine"}
-                  {item.address ? ` • ${item.address}` : ""}
-                </Text>
-                <Text style={styles.description}>
-                  Rate restaurants you enjoy so Proximity can form better group
-                  matches and venue recommendations.
-                </Text>
-
-                <Text style={styles.ratingLabel}>
-                  Your rating: {myRating ? `${myRating.rating}/5` : "Not rated yet"}
-                </Text>
-                <View style={styles.ratingRow}>
-                  {[1, 2, 3, 4, 5].map((value) => (
-                    <Pressable
-                      key={value}
-                      onPress={() => void handleRate(item, value)}
-                      disabled={isSaving}
-                      style={[
-                        styles.ratingButton,
-                        myRating?.rating === value ? styles.ratingButtonActive : null,
-                        isSaving ? styles.ratingButtonDisabled : null,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.ratingButtonText,
-                          myRating?.rating === value ? styles.ratingButtonTextActive : null,
-                        ]}
-                      >
-                        {value}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-                {isSaving ? <Text style={styles.savingText}>Saving...</Text> : null}
-              </View>
-            </View>
-          );
-        }}
-        ListEmptyComponent={
-          !loading ? (
-            <Text style={styles.emptyText}>
-              {query.trim()
-                ? "No restaurants match your search yet."
-                : "No restaurants available yet. Seed restaurants first."}
-            </Text>
-          ) : null
-        }
-      />
-    </View>
+    </APIProvider>
   );
 }
 
@@ -221,63 +316,83 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 25,
   },
+  mapWrap: {
+    height: 260,
+    borderRadius: 16,
+    overflow: "hidden",
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#dbe3ea",
+  },
   card: {
+    flexDirection: "row",
     backgroundColor: "#FFFFFF",
     padding: 16,
     borderRadius: 16,
+    alignItems: "center",
+  },
+  imagePlaceholder: {
+    width: 100,
+    height: 100,
+    borderRadius: 12,
+    overflow: "hidden",
+    marginRight: 12,
+    backgroundColor: "#e5e7eb",
+  },
+  image: {
+    width: 100,
+    height: 100,
   },
   cardTitle: {
-    fontSize: 18,
-    fontWeight: "700",
+    fontSize: 20,
+    fontWeight: "bold",
   },
   metaText: {
     marginTop: 4,
     color: "#555",
   },
+  ratingLabel: {
+    marginTop: 2,
+    fontWeight: "600",
+  },
   description: {
-    marginTop: 8,
+    marginTop: 6,
     color: "#555",
   },
-  ratingLabel: {
-    marginTop: 12,
-    fontWeight: "600",
-  },
-  ratingRow: {
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 8,
-    flexWrap: "wrap",
-  },
-  ratingButton: {
-    minWidth: 36,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#cbd5e1",
-    backgroundColor: "#fff",
-    alignItems: "center",
-  },
-  ratingButtonActive: {
-    backgroundColor: "#d58d6d",
-    borderColor: "#d58d6d",
-  },
-  ratingButtonDisabled: {
-    opacity: 0.7,
-  },
-  ratingButtonText: {
-    fontWeight: "600",
-    color: "#334155",
-  },
-  ratingButtonTextActive: {
-    color: "#fff",
-  },
   savingText: {
-    marginTop: 8,
+    marginTop: 6,
     color: "#6b7280",
+  },
+  venueChip: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    minWidth: 110,
+  },
+  venueChipSelected: {
+    borderColor: "#d58d6d",
+    backgroundColor: "#fff4ef",
+  },
+  venueChipText: {
+    fontWeight: "600",
+    color: "#111827",
+  },
+  venueChipTextSelected: {
+    color: "#9a3412",
+  },
+  venueChipMeta: {
+    marginTop: 2,
+    fontSize: 12,
+    color: "#6b7280",
+  },
+  venueChipMetaSelected: {
+    color: "#9a3412",
   },
   emptyText: {
     color: "#6b7280",
-    paddingVertical: 20,
+    paddingVertical: 8,
   },
 });
