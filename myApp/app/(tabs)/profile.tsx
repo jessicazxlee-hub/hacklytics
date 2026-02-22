@@ -2,14 +2,18 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  Button,
   Image,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
-import { getMeProfile, patchMeProfile } from "../../lib/backend";
+import {
+  getMeProfile,
+  getMyRestaurantRatings,
+  patchMeProfile,
+  type RestaurantRatingWithRestaurant,
+} from "../../lib/backend";
 import { auth, signOutUser } from "../../lib/firebase";
 
 type ProfileState = {
@@ -30,6 +34,8 @@ export default function Profile() {
   });
   const [loading, setLoading] = useState(true);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [pastRatings, setPastRatings] = useState<RestaurantRatingWithRestaurant[]>([]);
+  const [ratingsError, setRatingsError] = useState<string | null>(null);
 
   const loadProfile = useCallback(async () => {
     const u = auth.currentUser;
@@ -37,12 +43,33 @@ export default function Profile() {
 
     setLoading(true);
     setProfileError(null);
+    setRatingsError(null);
     try {
-      const p = await getMeProfile();
-      setProfile({
-        displayName: p.display_name ?? "",
-        hobbies: p.hobbies ?? [],
-      });
+      const [profileResult, ratingsResult] = await Promise.allSettled([
+        getMeProfile(),
+        getMyRestaurantRatings(),
+      ]);
+
+      if (profileResult.status === "fulfilled") {
+        const p = profileResult.value;
+        setProfile({
+          displayName: p.display_name ?? "",
+          hobbies: p.hobbies ?? [],
+        });
+      } else {
+        throw profileResult.reason;
+      }
+
+      if (ratingsResult.status === "fulfilled") {
+        const sorted = [...ratingsResult.value].sort(
+          (a, b) =>
+            new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
+        );
+        setPastRatings(sorted.slice(0, 5));
+      } else {
+        setPastRatings([]);
+        setRatingsError("Could not load past ratings");
+      }
     } catch (err: unknown) {
       const message =
         typeof err === "object" && err !== null && "message" in err
@@ -53,6 +80,7 @@ export default function Profile() {
         displayName: getFirebaseDisplayName(),
         hobbies: [],
       });
+      setPastRatings([]);
     } finally {
       setLoading(false);
     }
@@ -116,6 +144,10 @@ export default function Profile() {
             style={styles.image}
           />
         </View>
+
+        <TouchableOpacity style={styles.logoutPill} onPress={handleLogout}>
+          <Text style={styles.logoutPillText}>Log out</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Bottom Card */}
@@ -148,9 +180,32 @@ export default function Profile() {
           ))
         )}
 
-        <View style={{ marginTop: 12 }}>
-          <Button title="Log out" onPress={handleLogout} color="#c00" />
-        </View>
+        <Text style={styles.sectionHeader}>My past ratings</Text>
+        {ratingsError ? (
+          <View style={styles.listItem}>
+            <Text>{ratingsError}</Text>
+          </View>
+        ) : pastRatings.length === 0 ? (
+          <View style={styles.listItem}>
+            <Text>No ratings yet</Text>
+            <Text style={styles.subtleText}>
+              Rate venues in Discover to improve your group matches.
+            </Text>
+          </View>
+        ) : (
+          pastRatings.map((rating) => (
+            <View key={rating.id} style={styles.listItem}>
+              <Text style={styles.ratingTitle}>
+                {rating.restaurant?.name ?? `Restaurant #${rating.restaurant_id}`}
+              </Text>
+              <Text style={styles.subtleText}>
+                {rating.rating}/5
+                {rating.restaurant?.cuisine ? ` • ${rating.restaurant.cuisine}` : ""}
+              </Text>
+            </View>
+          ))
+        )}
+
       </View>
 
       {/* <TextInput
@@ -185,6 +240,7 @@ const styles = StyleSheet.create({
     height: "50%",
     alignItems: "center",
     justifyContent: "center",
+    zIndex: 2,
   },
 
   name: {
@@ -210,11 +266,25 @@ const styles = StyleSheet.create({
     borderRadius: 115,
   },
 
+  logoutPill: {
+    marginTop: 14,
+    backgroundColor: "#b93838",
+    paddingVertical: 10,
+    paddingHorizontal: 25,
+    borderRadius: 10,
+  },
+
+  logoutPillText: {
+    color: "white",
+    fontWeight: "600",
+  },
+
   card: {
     position: "absolute",
     bottom: 0,
     width: "100%",
     height: "55%",
+    zIndex: 1,
     backgroundColor: "#d9e3ea",
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
@@ -263,5 +333,22 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 8,
     marginBottom: 10,
+  },
+
+  sectionHeader: {
+    marginTop: 4,
+    marginBottom: 10,
+    fontWeight: "700",
+    color: "#374151",
+  },
+
+  ratingTitle: {
+    fontWeight: "600",
+  },
+
+  subtleText: {
+    marginTop: 2,
+    color: "#6b7280",
+    fontSize: 12,
   },
 });

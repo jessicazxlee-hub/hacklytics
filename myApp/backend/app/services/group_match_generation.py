@@ -8,6 +8,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.crud import social as crud_social
 from app.models.group_match import GroupMatch, GroupMatchMember, GroupMatchVenue
 from app.models.restaurant import Restaurant
@@ -18,6 +19,13 @@ from app.schemas.group_match_generation import (
     GroupMatchGenerateResponse,
     GroupMatchGeneratedGroupSummary,
     GroupMatchGenerateScoreSummary,
+)
+from app.schemas.vector_store import UserProfileVectorQuery
+from app.services.actian_vector_store import ActianVectorStoreAdapter, ActianVectorStoreConfig
+from app.services.embeddings import (
+    USER_PROFILE_EMBEDDING_VERSION,
+    FakeEmbedder,
+    build_user_profile_embedding_record,
 )
 
 ACTIVE_GROUP_STATUSES = ("forming", "confirmed", "scheduled")
@@ -132,6 +140,53 @@ def _candidate_score(
     return weighted_score, rating_affinity_total, pair_overlap_total, same_neighborhood_pairs
 
 
+def _vector_hybrid_anchor_similarity_scores(
+    db: Session,
+    *,
+    anchor: User,
+    candidate_pool: list[User],
+) -> dict[UUID, float]:
+    if not settings.vectorai_enabled:
+        return {}
+    if not candidate_pool:
+        return {}
+
+    try:
+        cfg = ActianVectorStoreConfig.from_settings(settings)
+        dimension = cfg.dimension
+        if dimension is None or dimension <= 0:
+            return {}
+
+        embedder = FakeEmbedder(dimension=dimension)
+        anchor_record = build_user_profile_embedding_record(
+            db,
+            user_id=anchor.id,
+            embedder=embedder,
+            embedding_version=USER_PROFILE_EMBEDDING_VERSION,
+        )
+        adapter = ActianVectorStoreAdapter(db=db, config=cfg)
+        candidate_ids = {str(c.id) for c in candidate_pool}
+        matches = adapter.query_similar_user_profiles(
+            UserProfileVectorQuery(
+                query_vector=anchor_record.vector,
+                top_k=max(20, min(200, len(candidate_pool) * 3)),
+                embedding_version=USER_PROFILE_EMBEDDING_VERSION,
+                exclude_user_ids=[str(anchor.id)],
+            )
+        )
+        score_map: dict[UUID, float] = {}
+        for match in matches:
+            if match.user_id not in candidate_ids:
+                continue
+            user_id = UUID(match.user_id)
+            # Keep the best score if duplicates are ever returned.
+            score_map[user_id] = max(score_map.get(user_id, float("-inf")), float(match.score))
+        return score_map
+    except Exception:
+        # Retrieval is optional for hybrid mode; fall back to heuristic ordering.
+        return {}
+
+
 def _group_score_summary(
     users: list[User],
     *,
@@ -187,6 +242,7 @@ def _choose_venue_name(group_users: list[User], *, mode: str) -> str | None:
 
 
 def _propose_groups(
+    db: Session,
     users: list[User],
     *,
     request: GroupMatchGenerateRequest,
@@ -201,10 +257,16 @@ def _propose_groups(
         anchor = remaining[0]
         group_members = [anchor]
         candidate_pool = remaining[1:]
+        vector_score_map = (
+            _vector_hybrid_anchor_similarity_scores(db, anchor=anchor, candidate_pool=candidate_pool)
+            if request.strategy == "vector_hybrid"
+            else {}
+        )
 
         while len(group_members) < target_size and candidate_pool:
             candidate_pool.sort(
                 key=lambda c: (
+                    vector_score_map.get(c.id, float("-inf")),
                     *_candidate_score(
                         c,
                         group_members,
@@ -291,6 +353,7 @@ def generate_group_matches(db: Session, request: GroupMatchGenerateRequest) -> G
     rating_signal_map = _get_user_rating_signal_map(db, [u.id for u in eligible_pool])
 
     proposed, unassigned_from_pool = _propose_groups(
+        db,
         eligible_pool,
         request=request,
         hobby_map=hobby_map,
@@ -324,6 +387,7 @@ def generate_group_matches(db: Session, request: GroupMatchGenerateRequest) -> G
     ]
 
     return GroupMatchGenerateResponse(
+        strategy_used=request.strategy,
         dry_run=request.dry_run,
         created_groups=0 if request.dry_run else len(proposed),
         skipped_users=sum(skip_reasons.values()),

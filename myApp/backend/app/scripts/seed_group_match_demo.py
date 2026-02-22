@@ -52,6 +52,12 @@ def _normalize_email(value: str) -> str:
     return value.strip().lower()
 
 
+def _demo_display_name(*, base_name: str, prefix: str) -> str:
+    # Keep demo companion names unique across repeated runs/targets while staying human-readable.
+    suffix = prefix.replace("demo-seed-", "")[:6]
+    return f"{base_name}-{suffix}"
+
+
 def _get_target_user(db, email: str) -> User | None:
     stmt = select(User).where(User.email == email)
     return db.scalar(stmt)
@@ -59,9 +65,10 @@ def _get_target_user(db, email: str) -> User | None:
 
 def _get_or_create_demo_user(db, *, spec: DemoCompanionSpec, prefix: str) -> User:
     email = f"{prefix}.{spec.key}@example.local"
+    display_name = _demo_display_name(base_name=spec.display_name, prefix=prefix)
     existing = db.scalar(select(User).where(User.email == email))
     if existing is not None:
-        existing.display_name = spec.display_name
+        existing.display_name = display_name
         existing.neighborhood = spec.neighborhood
         existing.open_to_meetups = spec.open_to_meetups
         existing.discoverable = True
@@ -70,7 +77,7 @@ def _get_or_create_demo_user(db, *, spec: DemoCompanionSpec, prefix: str) -> Use
 
     user = User(
         email=email,
-        display_name=spec.display_name,
+        display_name=display_name,
         neighborhood=spec.neighborhood,
         open_to_meetups=spec.open_to_meetups,
         discoverable=True,

@@ -2,6 +2,7 @@ import { Picker } from "@react-native-picker/picker";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { Button, ScrollView, Text, TextInput } from "react-native";
+import { patchMeProfile } from "../lib/backend";
 import { signupWithEmail } from "../lib/firebase";
 
 export default function CreateAccount() {
@@ -16,6 +17,13 @@ export default function CreateAccount() {
   >("unspecified");
   const [hobbies, setHobbies] = useState("");
 
+  function normalizeHobbyCodes(input: string): string[] {
+    return input
+      .split(",")
+      .map((s) => s.trim().toLowerCase().replace(/\s+/g, "_"))
+      .filter(Boolean);
+  }
+
   async function handleSignup() {
     const normalizedEmail = email.trim().toLowerCase();
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -26,6 +34,22 @@ export default function CreateAccount() {
 
     try {
       await signupWithEmail(normalizedEmail, password);
+
+      const hobbyCodes = normalizeHobbyCodes(hobbies);
+      try {
+        await patchMeProfile({
+          display_name: name.trim() || null,
+          hobbies: hobbyCodes,
+        });
+      } catch (profileErr: unknown) {
+        if (typeof profileErr === "object" && profileErr !== null && "message" in profileErr) {
+          alert(`Signup succeeded, but profile save failed: ${String((profileErr as { message: unknown }).message)}`);
+        } else {
+          alert("Signup succeeded, but profile save failed");
+        }
+        router.replace("/(tabs)/matches");
+        return;
+      }
 
       alert("Signup succeeded");
       router.replace("/(tabs)/matches");

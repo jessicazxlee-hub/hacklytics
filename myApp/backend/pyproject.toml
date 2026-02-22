@@ -37,6 +37,9 @@ packages = ["app"]
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+markers = [
+  "integration: local/external integration tests that are disabled by default",
+]
 
 [tool.ruff]
 line-length = 100

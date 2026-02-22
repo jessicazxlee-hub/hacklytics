@@ -183,3 +183,57 @@ def test_admin_group_match_generation_uses_restaurant_rating_signal(client):
     shared_count = len(member_ids.intersection(shared_cluster))
     neutral_count = len(member_ids.intersection(neutral_cluster))
     assert max(shared_count, neutral_count) == 3
+
+
+def test_admin_group_match_generation_vector_hybrid_uses_vector_scores(client, monkeypatch):
+    from app.services import group_match_generation as gen_mod
+
+    suffix = uuid4().hex[:8]
+    users = []
+    for idx in range(8):
+        user, _headers = _register_user(
+            client,
+            suffix=f"vh-{idx}-{suffix}",
+            neighborhood="Downtown",
+            open_to_meetups=True,
+        )
+        users.append(user)
+
+    preferred_cluster = {users[4]["id"], users[5]["id"], users[6]["id"], users[7]["id"]}
+    other_cluster = {users[0]["id"], users[1]["id"], users[2]["id"], users[3]["id"]}
+
+    def fake_vector_scores(_db, *, anchor, candidate_pool):
+        score_map = {}
+        for candidate in candidate_pool:
+            candidate_id = str(candidate.id)
+            if candidate_id in preferred_cluster:
+                score_map[candidate.id] = 100.0
+            elif candidate_id in other_cluster:
+                score_map[candidate.id] = 1.0
+        return score_map
+
+    monkeypatch.setattr(gen_mod, "_vector_hybrid_anchor_similarity_scores", fake_vector_scores)
+    monkeypatch.setattr(gen_mod.settings, "vectorai_enabled", True)
+
+    response = client.post(
+        "/api/v1/admin/group-matches/generate",
+        json={
+            "mode": "in_person",
+            "strategy": "vector_hybrid",
+            "max_groups": 1,
+            "target_group_size": 4,
+            "same_neighborhood_preferred": True,
+            "dry_run": True,
+        },
+        headers=_admin_headers(),
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["strategy_used"] == "vector_hybrid"
+    assert len(body["groups"]) == 1
+    member_ids = set(body["groups"][0]["member_ids"])
+    preferred_count = len(member_ids.intersection(preferred_cluster))
+    other_count = len(member_ids.intersection(other_cluster))
+    # Vector scores should pull the group toward the preferred cluster even when anchor ordering varies.
+    assert max(preferred_count, other_count) == 4 or preferred_count == 3
+    assert preferred_count >= other_count

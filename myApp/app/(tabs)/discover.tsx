@@ -30,6 +30,9 @@ import {
 const API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
 
 type RatingsByRestaurantId = Record<number, RestaurantRatingWithRestaurant>;
+type PendingRatingsByRestaurantId = Record<number, number>;
+
+const DEFAULT_MAP_CENTER = { lat: 33.77702970249832, lng: -84.39570715625945 };
 
 function restaurantDescription(restaurant: Restaurant): string {
   const parts = [
@@ -50,6 +53,8 @@ export default function Discover() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [ratingRestaurantId, setRatingRestaurantId] = useState<number | null>(null);
+  const [pendingRatingsByRestaurantId, setPendingRatingsByRestaurantId] =
+    useState<PendingRatingsByRestaurantId>({});
 
   const load = useCallback(async (mode: "initial" | "refresh" = "initial") => {
     if (mode === "refresh") {
@@ -59,10 +64,17 @@ export default function Discover() {
     }
 
     try {
-      const [restaurantsData, myRatings] = await Promise.all([
+      const [restaurantsResult, ratingsResult] = await Promise.allSettled([
         getRestaurants(),
         getMyRestaurantRatings(),
       ]);
+
+      if (restaurantsResult.status !== "fulfilled") {
+        throw restaurantsResult.reason;
+      }
+
+      const restaurantsData = restaurantsResult.value;
+      const myRatings = ratingsResult.status === "fulfilled" ? ratingsResult.value : [];
 
       const ratingMap: RatingsByRestaurantId = {};
       for (const rating of myRatings) {
@@ -78,6 +90,10 @@ export default function Discover() {
         );
       } else {
         setSelectedRestaurantId(null);
+      }
+
+      if (ratingsResult.status !== "fulfilled") {
+        console.warn("Discover ratings load failed; showing restaurants without saved ratings.", ratingsResult.reason);
       }
     } catch (err: unknown) {
       if (typeof err === "object" && err !== null && "message" in err) {
@@ -130,6 +146,10 @@ export default function Discover() {
   async function handleRate(restaurant: Restaurant, rating: number) {
     if (ratingRestaurantId !== null) return;
     setRatingRestaurantId(restaurant.id);
+    setPendingRatingsByRestaurantId((prev) => ({
+      ...prev,
+      [restaurant.id]: rating,
+    }));
     try {
       const saved = await rateRestaurant(restaurant.id, {
         rating,
@@ -151,11 +171,26 @@ export default function Discover() {
         alert("Failed to save rating");
       }
     } finally {
+      setPendingRatingsByRestaurantId((prev) => {
+        const next = { ...prev };
+        delete next[restaurant.id];
+        return next;
+      });
       setRatingRestaurantId(null);
     }
   }
 
-  const selectedRating = selectedRestaurant ? ratingsByRestaurantId[selectedRestaurant.id]?.rating ?? 0 : 0;
+  const selectedRating = selectedRestaurant
+    ? pendingRatingsByRestaurantId[selectedRestaurant.id] ??
+      ratingsByRestaurantId[selectedRestaurant.id]?.rating ??
+      0
+    : 0;
+  const selectedMapCenter =
+    selectedRestaurant &&
+    typeof selectedRestaurant.latitude === "number" &&
+    typeof selectedRestaurant.longitude === "number"
+      ? { lat: selectedRestaurant.latitude, lng: selectedRestaurant.longitude }
+      : DEFAULT_MAP_CENTER;
 
   return (
     <APIProvider apiKey={API_KEY ?? ""}>
@@ -177,8 +212,9 @@ export default function Discover() {
 
         <View style={styles.mapWrap}>
           <Map
+            key={selectedRestaurant?.id ?? "discover-map-default"}
             defaultZoom={13}
-            defaultCenter={{ lat: 33.77702970249832, lng: -84.39570715625945 }}
+            defaultCenter={selectedMapCenter}
             style={{ width: "100%", height: "100%" }}
             onCameraChanged={(ev: MapCameraChangedEvent) =>
               console.log("camera changed:", ev.detail.center, "zoom:", ev.detail.zoom)
@@ -266,7 +302,10 @@ export default function Discover() {
           contentContainerStyle={{ gap: 8, paddingBottom: 8 }}
           renderItem={({ item }) => {
             const selected = item.id === selectedRestaurant?.id;
-            const myRating = ratingsByRestaurantId[item.id]?.rating ?? null;
+            const myRating =
+              pendingRatingsByRestaurantId[item.id] ??
+              ratingsByRestaurantId[item.id]?.rating ??
+              null;
             return (
               <Pressable
                 onPress={() => setSelectedRestaurantId(item.id)}

@@ -168,7 +168,7 @@ async function authHeaders(): Promise<Record<string, string>> {
     throw new Error("Not authenticated");
   }
 
-  const idToken = await user.getIdToken(true);
+  const idToken = await user.getIdToken();
   return {
     Authorization: `Bearer ${idToken}`,
     "Content-Type": "application/json",

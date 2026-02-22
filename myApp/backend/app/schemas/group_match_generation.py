@@ -5,10 +5,12 @@ from pydantic import BaseModel, Field
 
 
 GroupMatchMode = Literal["in_person", "chat_only"]
+GroupMatchGenerationStrategy = Literal["heuristic", "vector_hybrid"]
 
 
 class GroupMatchGenerateRequest(BaseModel):
     mode: GroupMatchMode = "in_person"
+    strategy: GroupMatchGenerationStrategy = "heuristic"
     max_groups: int = Field(default=5, ge=1, le=100)
     target_group_size: int = Field(default=4, ge=2, le=8)
     same_neighborhood_preferred: bool = True
@@ -30,6 +32,7 @@ class GroupMatchGeneratedGroupSummary(BaseModel):
 
 
 class GroupMatchGenerateResponse(BaseModel):
+    strategy_used: GroupMatchGenerationStrategy
     dry_run: bool
     created_groups: int
     skipped_users: int
