@@ -1,35 +1,41 @@
 import React, { useEffect, useState } from 'react'
 import { View, Text, TextInput, Button } from 'react-native'
-import { auth } from '../lib/firebase'
-import { getProfile, createProfile } from '../lib/firebase'
+import { auth, signOutUser } from '../lib/firebase'
+import { getMeProfile, patchMeProfile } from '../lib/backend'
 import { onAuthStateChanged } from 'firebase/auth'
 import { useRouter } from 'expo-router'
 
 type ProfileState = {
-    name: string
+    displayName: string
     hobbies: string
 }
 
 export default function Profile() {
     const router = useRouter()
     const [profile, setProfile] = useState<ProfileState>({
-        name: '',
+        displayName: '',
         hobbies: '',
     })
 
     useEffect(() => {
         const unsub = onAuthStateChanged(auth, async (u) => {
             if (!u) {
-                router.replace('/create-account')
+                router.replace('/sign-in')
                 return
             }
 
-            const p = await getProfile(u.uid)
-            if (p) {
+            try {
+                const p = await getMeProfile()
                 setProfile({
-                    name: p.name ?? '',
+                    displayName: p.display_name ?? '',
                     hobbies: (p.hobbies ?? []).join(', '),
                 })
+            } catch (err: unknown) {
+                if (typeof err === 'object' && err !== null && 'message' in err) {
+                    alert(String((err as { message: unknown }).message))
+                } else {
+                    alert('Failed to load profile')
+                }
             }
         })
 
@@ -37,18 +43,31 @@ export default function Profile() {
     }, [router])
 
     async function save() {
-        const user = auth.currentUser
-        if (!user) return
+        try {
+            const updated = await patchMeProfile({
+                display_name: profile.displayName.trim() || null,
+                hobbies: profile.hobbies
+                    .split(',')
+                    .map(s => s.trim().toLowerCase())
+                    .filter(Boolean),
+            })
+            setProfile({
+                displayName: updated.display_name ?? '',
+                hobbies: (updated.hobbies ?? []).join(', '),
+            })
+            alert('Saved')
+        } catch (err: unknown) {
+            if (typeof err === 'object' && err !== null && 'message' in err) {
+                alert(String((err as { message: unknown }).message))
+            } else {
+                alert('Failed to save profile')
+            }
+        }
+    }
 
-        await createProfile(user.uid, {
-            name: profile.name,
-            hobbies: profile.hobbies
-                .split(',')
-                .map(s => s.trim())
-                .filter(Boolean),
-        })
-
-        alert('Saved')
+    async function handleLogout() {
+        await signOutUser()
+        router.replace('/sign-in')
     }
 
     return (
@@ -56,11 +75,11 @@ export default function Profile() {
             <Text style={{ fontSize: 20 }}>Profile</Text>
 
             <TextInput
-                value={profile.name}
+                value={profile.displayName}
                 onChangeText={(t) =>
-                    setProfile(p => ({ ...p, name: t }))
+                    setProfile(p => ({ ...p, displayName: t }))
                 }
-                placeholder="Name"
+                placeholder="Display name"
                 style={{ borderWidth: 1, marginVertical: 8, padding: 8 }}
             />
 
@@ -74,6 +93,9 @@ export default function Profile() {
             />
 
             <Button title="Save" onPress={save} />
+            <View style={{ marginTop: 12 }}>
+                <Button title="Log out" onPress={handleLogout} color="#c00" />
+            </View>
         </View>
     )
 }

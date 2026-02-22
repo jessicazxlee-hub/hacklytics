@@ -10,8 +10,8 @@ export default function Index() {
 
     useEffect(() => {
         const unsub = onAuthStateChanged(auth, (user) => {
-            if (user) router.replace('(tabs)')
-            else router.replace('/create-account')
+            if (user) router.replace('/(tabs)')
+            else router.replace('/sign-in')
         })
         return unsub
     }, [])

@@ -1,3 +1,5 @@
+import json
+import os
 from datetime import datetime, timedelta, timezone
 
 from jose import JWTError, jwt
@@ -29,3 +31,44 @@ def decode_token(token: str) -> dict | None:
         return jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
     except JWTError:
         return None
+
+
+def verify_firebase_id_token(token: str) -> dict | None:
+    try:
+        import firebase_admin
+        from firebase_admin import auth as firebase_auth
+        from firebase_admin import credentials
+    except ImportError:
+        return None
+
+    try:
+        firebase_admin.get_app()
+    except ValueError:
+        service_account_json = os.getenv("SERVICE_ACCOUNT_JSON")
+        if service_account_json:
+            try:
+                info = json.loads(service_account_json)
+                cred = credentials.Certificate(info)
+                firebase_admin.initialize_app(cred)
+            except (json.JSONDecodeError, ValueError):
+                return None
+        else:
+            try:
+                firebase_admin.initialize_app()
+            except ValueError:
+                return None
+
+    try:
+        decoded = firebase_auth.verify_id_token(token)
+    except Exception:  # noqa: BLE001
+        return None
+
+    uid = decoded.get("uid")
+    if not uid:
+        return None
+
+    return {
+        "uid": uid,
+        "email": decoded.get("email"),
+        "email_verified": bool(decoded.get("email_verified", False)),
+    }
