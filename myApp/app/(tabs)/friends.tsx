@@ -1,50 +1,67 @@
 import React, { useEffect, useState } from 'react'
-import { View, Text, FlatList, TouchableOpacity } from 'react-native'
-import { db } from '../../lib/firebase'
-import { collection, getDocs } from 'firebase/firestore'
-import { useRouter } from 'expo-router'
-
-type Friend = {
-    id: string
-    name?: string
-    hobbies?: string[]
-}
+import { View, Text, FlatList, ActivityIndicator } from 'react-native'
+import { getFriends, type FriendListItem } from '../../lib/backend'
 
 export default function Friends() {
-    const router = useRouter()
-    const [friends, setFriends] = useState<Friend[]>([])
+    const [friends, setFriends] = useState<FriendListItem[]>([])
+    const [loading, setLoading] = useState(true)
 
     useEffect(() => {
+        let mounted = true
+
         async function load() {
-            const snap = await getDocs(collection(db, 'users'))
-            const users: Friend[] = snap.docs.map(d => ({
-                id: d.id,
-                ...(d.data() as Omit<Friend, 'id'>),
-            }))
-            setFriends(users)
+            try {
+                const items = await getFriends()
+                if (mounted) {
+                    setFriends(items)
+                }
+            } catch (err: unknown) {
+                if (mounted) {
+                    if (typeof err === 'object' && err !== null && 'message' in err) {
+                        alert(String((err as { message: unknown }).message))
+                    } else {
+                        alert('Failed to load friends')
+                    }
+                }
+            } finally {
+                if (mounted) {
+                    setLoading(false)
+                }
+            }
         }
         load()
+
+        return () => {
+            mounted = false
+        }
     }, [])
 
     return (
         <View style={{ flex: 1, padding: 12 }}>
             <Text style={{ fontSize: 20, marginBottom: 8 }}>Friends</Text>
+            <Text style={{ color: '#666', marginBottom: 8 }}>
+                Friend list now loads from the backend. Chat migration comes next.
+            </Text>
+            {loading ? (
+                <ActivityIndicator />
+            ) : null}
             <FlatList
                 data={friends}
-                keyExtractor={i => i.id}
+                keyExtractor={i => i.user.id}
                 renderItem={({ item }) => (
-                    <TouchableOpacity
-                        style={{ padding: 12, borderBottomWidth: 1 }}
-                        onPress={() => router.push(`/chat/${item.id}`)}
-                    >
+                    <View style={{ padding: 12, borderBottomWidth: 1 }}>
                         <Text style={{ fontWeight: '600' }}>
-                            {item.name ?? 'Unnamed'}
+                            {item.user.display_name ?? 'Unnamed'}
                         </Text>
+                        <Text>{item.user.neighborhood ?? ''}</Text>
                         <Text>
-                            {item.hobbies?.join(', ') ?? ''}
+                            {item.user.hobbies.join(', ')}
                         </Text>
-                    </TouchableOpacity>
+                    </View>
                 )}
+                ListEmptyComponent={
+                    !loading ? <Text style={{ color: '#666' }}>No friends yet.</Text> : null
+                }
             />
         </View>
     )
