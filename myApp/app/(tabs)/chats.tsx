@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useState } from 'react'
 import { View, Text, FlatList, ActivityIndicator, Pressable } from 'react-native'
-import { useRouter } from 'expo-router'
+import { useFocusEffect, useRouter } from 'expo-router'
 
 import { getChats, type GroupChatSummary } from '../../lib/backend'
 
@@ -8,36 +8,35 @@ export default function ChatsTab() {
     const router = useRouter()
     const [chats, setChats] = useState<GroupChatSummary[]>([])
     const [loading, setLoading] = useState(true)
+    const [refreshing, setRefreshing] = useState(false)
 
-    useEffect(() => {
-        let mounted = true
-
-        async function load() {
-            try {
-                const items = await getChats()
-                if (mounted) {
-                    setChats(items)
-                }
-            } catch (err: unknown) {
-                if (mounted) {
-                    if (typeof err === 'object' && err !== null && 'message' in err) {
-                        alert(String((err as { message: unknown }).message))
-                    } else {
-                        alert('Failed to load chats')
-                    }
-                }
-            } finally {
-                if (mounted) {
-                    setLoading(false)
-                }
+    const load = useCallback(async (mode: 'initial' | 'refresh' = 'initial') => {
+        if (mode === 'refresh') {
+            setRefreshing(true)
+        } else {
+            setLoading(true)
+        }
+        try {
+            const items = await getChats()
+            setChats(items)
+        } catch (err: unknown) {
+            if (typeof err === 'object' && err !== null && 'message' in err) {
+                alert(String((err as { message: unknown }).message))
+            } else {
+                alert('Failed to load chats')
+            }
+        } finally {
+            if (mode === 'refresh') {
+                setRefreshing(false)
+            } else {
+                setLoading(false)
             }
         }
-
-        load()
-        return () => {
-            mounted = false
-        }
     }, [])
+
+    useFocusEffect(useCallback(() => {
+        void load('initial')
+    }, [load]))
 
     return (
         <View style={{ flex: 1, padding: 12 }}>
@@ -48,6 +47,8 @@ export default function ChatsTab() {
             {loading ? <ActivityIndicator /> : null}
             <FlatList
                 data={chats}
+                refreshing={refreshing}
+                onRefresh={() => void load('refresh')}
                 keyExtractor={(item) => item.id}
                 renderItem={({ item }) => (
                     <Pressable

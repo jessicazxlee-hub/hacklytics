@@ -113,3 +113,73 @@ def test_admin_group_match_generation_chat_only_filters_open_to_meetups(client):
     group = body["groups"][0]
     assert group["mode"] == "chat_only"
     assert group["venue_name"] is None
+
+
+def test_admin_group_match_generation_uses_restaurant_rating_signal(client):
+    suffix = uuid4().hex[:8]
+    # All users are otherwise equivalent (same neighborhood, no hobbies), so rating overlap should break ties.
+    anchor, anchor_headers = _register_user(client, suffix=f"signal-anchor-{suffix}", neighborhood="Downtown")
+    preferred_a, preferred_a_headers = _register_user(
+        client, suffix=f"signal-prefa-{suffix}", neighborhood="Downtown"
+    )
+    preferred_b, preferred_b_headers = _register_user(
+        client, suffix=f"signal-prefb-{suffix}", neighborhood="Downtown"
+    )
+    neutral_a, neutral_a_headers = _register_user(client, suffix=f"signal-neua-{suffix}", neighborhood="Downtown")
+    neutral_b, neutral_b_headers = _register_user(client, suffix=f"signal-neub-{suffix}", neighborhood="Downtown")
+    neutral_c, neutral_c_headers = _register_user(client, suffix=f"signal-neuc-{suffix}", neighborhood="Downtown")
+
+    shared_restaurant = client.post(
+        "/api/v1/restaurants",
+        json={"name": f"Shared Spot {suffix}", "cuisine": "Cafe", "address": "1 Shared St"},
+    )
+    assert shared_restaurant.status_code == 201, shared_restaurant.text
+    shared_restaurant_id = shared_restaurant.json()["id"]
+
+    other_restaurant = client.post(
+        "/api/v1/restaurants",
+        json={"name": f"Other Spot {suffix}", "cuisine": "Burgers", "address": "2 Other St"},
+    )
+    assert other_restaurant.status_code == 201, other_restaurant.text
+    other_restaurant_id = other_restaurant.json()["id"]
+
+    for headers in (anchor_headers, preferred_a_headers, preferred_b_headers):
+        rate = client.post(
+            f"/api/v1/restaurants/{shared_restaurant_id}/rating",
+            json={"rating": 5, "visited": True, "would_return": True},
+            headers=headers,
+        )
+        assert rate.status_code in (200, 201), rate.text
+
+    for headers in (neutral_a_headers, neutral_b_headers, neutral_c_headers):
+        rate = client.post(
+            f"/api/v1/restaurants/{other_restaurant_id}/rating",
+            json={"rating": 5, "visited": True, "would_return": True},
+            headers=headers,
+        )
+        assert rate.status_code in (200, 201), rate.text
+
+    response = client.post(
+        "/api/v1/admin/group-matches/generate",
+        json={
+            "mode": "in_person",
+            "max_groups": 1,
+            "target_group_size": 4,
+            "same_neighborhood_preferred": True,
+            "dry_run": True,
+        },
+        headers=_admin_headers(),
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert len(body["groups"]) == 1
+    member_ids = set(body["groups"][0]["member_ids"])
+
+    shared_cluster = {anchor["id"], preferred_a["id"], preferred_b["id"]}
+    neutral_cluster = {neutral_a["id"], neutral_b["id"], neutral_c["id"]}
+
+    # Whichever cluster anchors first, rating affinity should cause the greedy
+    # builder to keep that 3-person preference cluster together.
+    shared_count = len(member_ids.intersection(shared_cluster))
+    neutral_count = len(member_ids.intersection(neutral_cluster))
+    assert max(shared_count, neutral_count) == 3

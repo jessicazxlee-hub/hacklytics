@@ -5,11 +5,13 @@ from dataclasses import dataclass
 from itertools import combinations
 from uuid import UUID
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.crud import social as crud_social
 from app.models.group_match import GroupMatch, GroupMatchMember, GroupMatchVenue
+from app.models.restaurant import Restaurant
+from app.models.restaurant_rating import RestaurantRating
 from app.models.user import User
 from app.schemas.group_match_generation import (
     GroupMatchGenerateRequest,
@@ -32,6 +34,12 @@ class ProposedGroup:
     group_match_id: UUID | None = None
 
 
+@dataclass(frozen=True)
+class UserRatingSignals:
+    liked_restaurant_ids: frozenset[int]
+    liked_cuisines: frozenset[str]
+
+
 def _normalized_neighborhood(value: str | None) -> str:
     return (value or "").strip().lower()
 
@@ -40,27 +48,88 @@ def _pair_overlap_count(hobbies_a: set[str], hobbies_b: set[str]) -> int:
     return len(hobbies_a.intersection(hobbies_b))
 
 
+def _pair_rating_affinity_score(left: UserRatingSignals, right: UserRatingSignals) -> int:
+    shared_restaurants = len(left.liked_restaurant_ids.intersection(right.liked_restaurant_ids))
+    shared_cuisines = len(left.liked_cuisines.intersection(right.liked_cuisines))
+    # Shared exact restaurants are a stronger signal than cuisine overlap.
+    return (2 * shared_restaurants) + shared_cuisines
+
+
+def _get_user_rating_signal_map(db: Session, user_ids: list[UUID]) -> dict[UUID, UserRatingSignals]:
+    if not user_ids:
+        return {}
+
+    stmt = (
+        select(
+            RestaurantRating.user_id,
+            RestaurantRating.restaurant_id,
+            RestaurantRating.rating,
+            RestaurantRating.would_return,
+            Restaurant.cuisine,
+        )
+        .join(Restaurant, Restaurant.id == RestaurantRating.restaurant_id)
+        .where(RestaurantRating.user_id.in_(user_ids))
+    )
+
+    restaurant_map: dict[UUID, set[int]] = {}
+    cuisine_map: dict[UUID, set[str]] = {}
+
+    for user_id, restaurant_id, rating, would_return, cuisine in db.execute(stmt).all():
+        is_positive = bool((rating is not None and rating >= 4) or would_return is True)
+        if not is_positive:
+            continue
+
+        restaurant_map.setdefault(user_id, set()).add(int(restaurant_id))
+        if cuisine:
+            cuisine_value = str(cuisine).strip().lower()
+            if cuisine_value:
+                cuisine_map.setdefault(user_id, set()).add(cuisine_value)
+
+    user_signal_map: dict[UUID, UserRatingSignals] = {}
+    for user_id in user_ids:
+        user_signal_map[user_id] = UserRatingSignals(
+            liked_restaurant_ids=frozenset(restaurant_map.get(user_id, set())),
+            liked_cuisines=frozenset(cuisine_map.get(user_id, set())),
+        )
+    return user_signal_map
+
+
 def _candidate_score(
     candidate: User,
     current_group: list[User],
     *,
     hobby_map: dict[UUID, list[str]],
+    rating_signal_map: dict[UUID, UserRatingSignals],
     same_neighborhood_preferred: bool,
-) -> tuple[int, int, int]:
+) -> tuple[int, int, int, int]:
     candidate_hobbies = set(hobby_map.get(candidate.id, []))
+    candidate_rating_signals = rating_signal_map.get(
+        candidate.id,
+        UserRatingSignals(frozenset(), frozenset()),
+    )
     pair_overlap_total = 0
     same_neighborhood_pairs = 0
+    rating_affinity_total = 0
     for member in current_group:
         member_hobbies = set(hobby_map.get(member.id, []))
         pair_overlap_total += _pair_overlap_count(candidate_hobbies, member_hobbies)
+        member_rating_signals = rating_signal_map.get(
+            member.id,
+            UserRatingSignals(frozenset(), frozenset()),
+        )
+        rating_affinity_total += _pair_rating_affinity_score(candidate_rating_signals, member_rating_signals)
         if same_neighborhood_preferred and _normalized_neighborhood(candidate.neighborhood) and (
             _normalized_neighborhood(candidate.neighborhood) == _normalized_neighborhood(member.neighborhood)
         ):
             same_neighborhood_pairs += 1
 
-    weighted_score = pair_overlap_total + (2 * same_neighborhood_pairs if same_neighborhood_preferred else 0)
+    weighted_score = (
+        pair_overlap_total
+        + rating_affinity_total
+        + (2 * same_neighborhood_pairs if same_neighborhood_preferred else 0)
+    )
     # Return tiebreakers explicitly for stable sorting.
-    return weighted_score, pair_overlap_total, same_neighborhood_pairs
+    return weighted_score, rating_affinity_total, pair_overlap_total, same_neighborhood_pairs
 
 
 def _group_score_summary(
@@ -122,6 +191,7 @@ def _propose_groups(
     *,
     request: GroupMatchGenerateRequest,
     hobby_map: dict[UUID, list[str]],
+    rating_signal_map: dict[UUID, UserRatingSignals],
 ) -> tuple[list[ProposedGroup], int]:
     target_size = request.target_group_size
     remaining = list(users)
@@ -139,6 +209,7 @@ def _propose_groups(
                         c,
                         group_members,
                         hobby_map=hobby_map,
+                        rating_signal_map=rating_signal_map,
                         same_neighborhood_preferred=request.same_neighborhood_preferred,
                     ),
                     str(c.id),
@@ -217,11 +288,13 @@ def generate_group_matches(db: Session, request: GroupMatchGenerateRequest) -> G
 
     eligible_pool = [user for user in all_discoverable_in_mode if user.id not in active_group_user_ids]
     hobby_map = crud_social.get_user_hobby_codes_map(db, [u.id for u in eligible_pool])
+    rating_signal_map = _get_user_rating_signal_map(db, [u.id for u in eligible_pool])
 
     proposed, unassigned_from_pool = _propose_groups(
         eligible_pool,
         request=request,
         hobby_map=hobby_map,
+        rating_signal_map=rating_signal_map,
     )
 
     if not request.dry_run and proposed:
