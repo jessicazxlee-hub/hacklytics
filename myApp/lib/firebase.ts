@@ -6,13 +6,6 @@ import {
     signOut,
     type User,
 } from 'firebase/auth'
-import {
-    getFirestore,
-    doc,
-    setDoc,
-    getDoc,
-} from 'firebase/firestore'
-import type { UserProfile } from '../types'
 
 // Load firebase config dynamically
 let firebaseConfig: FirebaseOptions | null = null
@@ -39,7 +32,6 @@ if (!firebaseConfig) {
 
 const app = initializeApp(firebaseConfig)
 export const auth = getAuth(app)
-export const db = getFirestore(app)
 
 // ---------- Auth helpers ----------
 
@@ -71,25 +63,8 @@ export async function signOutUser(): Promise<void> {
     await signOut(auth)
 }
 
-// ---------- Profile helpers ----------
-
-export async function createProfile(
-    uid: string,
-    profile: UserProfile
-): Promise<void> {
-    await setDoc(doc(db, 'users', uid), profile, { merge: true })
-}
-
-export async function getProfile(
-    uid: string
-): Promise<UserProfile | null> {
-    const d = await getDoc(doc(db, 'users', uid))
-    return d.exists() ? (d.data() as UserProfile) : null
-}
-
 export default {
     signupWithEmail,
     loginWithEmail,
-    createProfile,
-    getProfile,
+    signOutUser,
 }
